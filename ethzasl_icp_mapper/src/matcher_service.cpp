@@ -13,6 +13,7 @@
 #include "ethzasl_icp_mapper/MatchCloudsWithGuess.h"
 #include "tf/tf.h"
 #include "tf_conversions/tf_eigen.h"
+#include "eigen_conversions/eigen_msg.h"
 
 
 using namespace std;
@@ -32,7 +33,7 @@ class CloudMatcher
 public:
 	CloudMatcher(ros::NodeHandle& n);
 	bool match(ethzasl_icp_mapper::MatchClouds::Request& req, ethzasl_icp_mapper::MatchClouds::Response& res);
-        bool matchWithGuess(ethzasl_icp_mapper::MatchCloudsWithGuess::Request& req, ethzasl_icp_mapper::MatchCloudsWithGuess::Response& res);
+    bool matchWithGuess(ethzasl_icp_mapper::MatchCloudsWithGuess::Request& req, ethzasl_icp_mapper::MatchCloudsWithGuess::Response& res);
 };
 
 CloudMatcher::CloudMatcher(ros::NodeHandle& n):
@@ -164,25 +165,29 @@ bool CloudMatcher::matchWithGuess(ethzasl_icp_mapper::MatchCloudsWithGuess::Requ
 		return false;
 	}
 	
-        //Convert ROS Transform Message to PointMatcher type
+        //PointMatcher type for Initial Guess
         PM::TransformationParameters TInitialGuess;
 
 	tf::Transform transformInitialGuess;//Create a Transform Object
             
-        tf::transformMsgToTF(req.initialGuess, transformInitialGuess);//Convert ROS Transform msg to tf data
+        //tf::transformMsgToTF(req.initialGuess, transformInitialGuess);//Convert ROS Transform msg to tf data
 
 	//Eigen::Matrix4f  //Creat a Eigen Object
             
-        Eigen::Affine3d initialGuessInEigenMatrix;
-	tf::transformTFToEigen(transformInitialGuess, initialGuessInEigenMatrix);
+        Eigen::Affine3d initialGuessInEigenMatrix; //Eigen Object
+	tf::transformMsgToEigen(req.initialGuess, initialGuessInEigenMatrix);
 	
-	TInitialGuess = initialGuessInEigenMatrix.matrix().cast<float>();
-        
+	//TInitialGuess = initialGuessInEigenMatrix.matrix().cast<float>();
+        TInitialGuess = initialGuessInEigenMatrix.matrix().cast<float>();
 	// call ICP
 	try 
 	{
-		const PM::TransformationParameters transform(icp(readingCloud, referenceCloud, TInitialGuess));
-		tf::transformTFToMsg(PointMatcher_ros::eigenMatrixToTransform<float>(transform), res.transform);
+		PM::TransformationParameters Ticp;	
+		Ticp = icp(readingCloud, referenceCloud, TInitialGuess);
+		geometry_msgs::Transform TicpMsg;		
+		//const PM::TransformationParameters transform(icp(readingCloud, referenceCloud, TInitialGuess));
+		tf::transformTFToMsg(PointMatcher_ros::eigenMatrixToTransform<float>(Ticp), TicpMsg);
+		res.transform = TicpMsg;
 		ROS_INFO_STREAM("match ratio: " << icp.errorMinimizer->getWeightedPointUsedRatio() << endl);
 	}
 	catch (PM::ConvergenceError error)
